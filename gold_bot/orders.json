@@ -1,0 +1,26 @@
+{
+  "20260125201834": {
+    "order_id": "20260125201834",
+    "user_id": "6086536190",
+    "user_name": "Baha",
+    "username": "@Bahich_1",
+    "amount_sums": 15000,
+    "gold_amount": 100,
+    "status": "pending",
+    "receipt_photo_id": "AgACAgIAAxkBAAMRaXY0R5xHI6Yo-ehSIndd8v6IFOMAAm8PaxtyCbBLtcEGGdwzh0QBAAMCAAN5AAM4BA",
+    "created_at": "2026-01-25 20:18:34"
+  },
+  "20260125201914": {
+    "order_id": "20260125201914",
+    "user_id": "118251143",
+    "user_name": "Р.М",
+    "username": "@mamochka1010",
+    "amount_sums": 15000,
+    "gold_amount": 100,
+    "status": "approved",
+    "receipt_photo_id": "AgACAgIAAxkBAAMbaXY0blRm2rEObrcbtHgRYtRGWSgAArISaxugr7FLQxNHYAK9JqEBAAMCAAN5AAM4BA",
+    "created_at": "2026-01-25 20:19:14",
+    "admin_message_id": 29,
+    "approved_at": "2026-01-25 20:19:24"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "G20260125214031": {
+    "order_id": "G20260125214031",
+    "user_id": "118251143",
+    "user_name": "Р.М",
+    "username": "@mamochka1010",
+    "amount_sums": 15000,
+    "gold_amount": 100,
+    "status": "approved",
+    "receipt_photo_id": "AgACAgIAAxkBAAMbaXY0blRm2rEObrcbtHgRYtRGWSgAArISaxugr7FLQxNHYAK9JqEBAAMCAAN5AAM4BA",
+    "created_at": "2026-01-25 21:40:31",
+    "order_type": "gold",
+    "admin_message_id": 82,
+    "approved_at": "2026-01-25 21:40:37"
+  }
+}
