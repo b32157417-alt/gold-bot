@@ -141,6 +141,7 @@ class UserStates(StatesGroup):
     chatting = State()
     waiting_chat_end_confirm = State()
     waiting_reject_reason = State()
+    waiting_skin_photo = State()
 
 # ===================== ИНИЦИАЛИЗАЦИЯ =====================
 bot = Bot(token=BOT_TOKEN)
@@ -1140,7 +1141,7 @@ async def show_premium_payment(message: types.Message, state: FSMContext):
     )
 
 # ===================== ОПЛАТА =====================
-@dp.callback_query(F.data == "pay_humo")
+@dp.callback_query(lambda c: c.data == "pay_humo")
 async def show_humo_details(callback: types.CallbackQuery, state: FSMContext):
     try:
         data = await state.get_data()
@@ -1197,7 +1198,7 @@ async def show_humo_details(callback: types.CallbackQuery, state: FSMContext):
         logger.error(f"Ошибка в pay_humo: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.callback_query(F.data == "pay_ton")
+@dp.callback_query(lambda c: c.data == "pay_ton")
 async def show_ton_details(callback: types.CallbackQuery, state: FSMContext):
     try:
         data = await state.get_data()
@@ -1260,7 +1261,7 @@ async def show_ton_details(callback: types.CallbackQuery, state: FSMContext):
         logger.error(f"Ошибка в pay_ton: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.callback_query(F.data == "cancel_payment")
+@dp.callback_query(lambda c: c.data == "cancel_payment")
 async def cancel_payment(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
     await callback.message.edit_text("❌ Оплата отменена")
@@ -1359,7 +1360,7 @@ async def process_receipt(message: types.Message, state: FSMContext):
         await state.clear()
 
 # ===================== АДМИН: ПОДТВЕРЖДЕНИЕ/ОТКЛОНЕНИЕ ЗАКАЗОВ =====================
-@dp.callback_query(F.data.startswith("approve_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('approve_'))
 async def admin_approve_order(callback: types.CallbackQuery):
     """Подтверждение заказа администратором"""
     if str(callback.from_user.id) != str(ADMIN_ID):
@@ -1475,7 +1476,7 @@ async def admin_approve_order(callback: types.CallbackQuery):
         logger.error(f"Ошибка в admin_approve_order: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.callback_query(F.data.startswith("reject_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('reject_') and not c.data.startswith('reject_w_') and not c.data.startswith('reject_sub_'))
 async def admin_reject_order(callback: types.CallbackQuery, state: FSMContext):
     """Отклонение заказа администратором"""
     if str(callback.from_user.id) != str(ADMIN_ID):
@@ -1583,7 +1584,7 @@ async def process_reject_reason(message: types.Message, state: FSMContext):
     
     await state.clear()
 
-@dp.callback_query(F.data.startswith("complete_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('complete_'))
 async def admin_complete_order(callback: types.CallbackQuery):
     """Завершение заказа администратором"""
     if str(callback.from_user.id) != str(ADMIN_ID):
@@ -1657,7 +1658,7 @@ async def admin_complete_order(callback: types.CallbackQuery):
         await callback.answer("❌ Произошла ошибка")
 
 # ===================== АДМИН: ЧАТ ДЛЯ PREMIUM =====================
-@dp.callback_query(F.data.startswith("start_chat_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('start_chat_'))
 async def admin_start_chat(callback: types.CallbackQuery):
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
@@ -1717,7 +1718,7 @@ async def admin_start_chat(callback: types.CallbackQuery):
         logger.error(f"Ошибка в admin_start_chat: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.callback_query(F.data.startswith("end_chat_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('end_chat_'))
 async def admin_end_chat_confirm(callback: types.CallbackQuery, state: FSMContext):
     """Админ нажимает завершить чат - показываем подтверждение"""
     if str(callback.from_user.id) != str(ADMIN_ID):
@@ -1812,7 +1813,7 @@ async def process_chat_end_confirm(message: types.Message, state: FSMContext):
     
     await state.clear()
 
-@dp.callback_query(F.data.startswith("reject_sub_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('reject_sub_'))
 async def admin_reject_sub(callback: types.CallbackQuery):
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
@@ -1847,7 +1848,7 @@ async def admin_reject_sub(callback: types.CallbackQuery):
         await callback.answer("❌ Произошла ошибка")
 
 # ===================== АДМИН: ВЫВОД ГОЛДЫ =====================
-@dp.callback_query(F.data.startswith("buy_skin_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('buy_skin_'))
 async def admin_buy_skin(callback: types.CallbackQuery):
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
@@ -1879,7 +1880,7 @@ async def admin_buy_skin(callback: types.CallbackQuery):
         logger.error(f"Ошибка в admin_buy_skin: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.callback_query(F.data.startswith("skin_purchased_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('skin_purchased_'))
 async def admin_skin_purchased(callback: types.CallbackQuery):
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
@@ -1911,7 +1912,7 @@ async def admin_skin_purchased(callback: types.CallbackQuery):
         logger.error(f"Ошибка в admin_skin_purchased: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.callback_query(F.data.startswith("send_skin_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('send_skin_'))
 async def admin_send_skin(callback: types.CallbackQuery, state: FSMContext):
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
@@ -1932,13 +1933,13 @@ async def admin_send_skin(callback: types.CallbackQuery, state: FSMContext):
             reply_markup=get_cancel_keyboard()
         )
         
-        await state.set_state("waiting_skin_photo")
+        await state.set_state(UserStates.waiting_skin_photo)
         await callback.answer()
     except Exception as e:
         logger.error(f"Ошибка в admin_send_skin: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.message(F.photo, lambda message: message.state == "waiting_skin_photo")
+@dp.message(UserStates.waiting_skin_photo, F.photo)
 async def process_skin_photo(message: types.Message, state: FSMContext):
     if str(message.from_user.id) != str(ADMIN_ID):
         await message.answer("❌ Нет доступа!")
@@ -2000,7 +2001,7 @@ async def process_skin_photo(message: types.Message, state: FSMContext):
     
     await state.clear()
 
-@dp.callback_query(F.data.startswith("reject_w_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('reject_w_'))
 async def admin_reject_withdrawal(callback: types.CallbackQuery):
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
@@ -2034,7 +2035,7 @@ async def admin_reject_withdrawal(callback: types.CallbackQuery):
         logger.error(f"Ошибка в admin_reject_withdrawal: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.callback_query(F.data.startswith("skin_problem_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('skin_problem_'))
 async def admin_skin_problem(callback: types.CallbackQuery):
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
@@ -2058,7 +2059,7 @@ async def admin_skin_problem(callback: types.CallbackQuery):
         await callback.answer("❌ Произошла ошибка")
 
 # ===================== ОБРАБОТКА ОТЗЫВОВ =====================
-@dp.callback_query(F.data.startswith("leave_review_"))
+@dp.callback_query(lambda c: c.data and c.data.startswith('leave_review_'))
 async def leave_review_start(callback: types.CallbackQuery, state: FSMContext):
     """Начало процесса оставления отзыва"""
     try:
@@ -2359,7 +2360,7 @@ async def forward_messages(message: types.Message, state: FSMContext):
     except Exception as e:
         logger.error(f"Ошибка в forward_messages: {e}")
 
-@dp.callback_query(F.data == "cancel")
+@dp.callback_query(lambda c: c.data == "cancel")
 async def cancel_callback(callback: types.CallbackQuery):
     """Отмена действия"""
     await callback.message.delete()
