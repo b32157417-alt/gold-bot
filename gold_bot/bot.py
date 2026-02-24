@@ -2649,7 +2649,7 @@ if __name__ == "__main__":
         print("=" * 50)
         print("🛑 Бот завершил работу")
         print("=" * 50)
-    # ===================== АДМИН: ЗАВЕРШЕНИЕ ЗАКАЗА (ПОКУПКА ТОВАРА) =====================
+        # ===================== АДМИН: ЗАВЕРШЕНИЕ ЗАКАЗА (ПОКУПКА ТОВАРА) =====================
 @dp.callback_query(lambda c: c.data and c.data.startswith('complete_'))
 async def admin_complete_order(callback: types.CallbackQuery, state: FSMContext):
     """Завершение заказа - админ купил товар и отправляет подтверждение"""
