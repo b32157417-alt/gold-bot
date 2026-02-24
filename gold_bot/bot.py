@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ 
 GOLD BOT - ИСПРАВЛЕННАЯ ВЕРСИЯ
-ВСЕ КНОПКИ РАБОТАЮТ
+ПРАВИЛЬНАЯ ЛОГИКА: Подтверждение чека → Ожидание покупки → Завершение заказа
 """
 
 import asyncio
@@ -380,14 +380,14 @@ def get_leave_review_keyboard(order_id, order_type="withdrawal"):
 def get_admin_order_keyboard(order_id, order_type="gold"):
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"approve_{order_type}_{order_id}"),
+            InlineKeyboardButton(text="✅ Подтвердить оплату", callback_data=f"approve_{order_type}_{order_id}"),
             InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{order_type}_{order_id}")
         ]
     ])
 
 def get_admin_complete_keyboard(order_id, order_type="gold"):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Завершить заказ", callback_data=f"complete_{order_type}_{order_id}")]
+        [InlineKeyboardButton(text="✅ Завершить заказ (купить скин)", callback_data=f"complete_{order_type}_{order_id}")]
     ])
 
 def get_admin_start_chat_keyboard(order_id):
@@ -621,7 +621,12 @@ async def my_orders_cmd(message: types.Message):
     for order_id, order in orders_gold.items():
         if order['user_id'] == user_id:
             has_orders = True
-            status_emoji = "✅" if order['status'] == 'completed' else "⏳" if order['status'] == 'pending' else "❌"
+            status_emoji = {
+                "pending": "⏳",
+                "awaiting_purchase": "🛒",
+                "completed": "✅",
+                "rejected": "❌"
+            }.get(order['status'], "❓")
             orders_text += f"{status_emoji} **Покупка голды**\n"
             orders_text += f"💰 {order['gold_amount']} голды\n"
             orders_text += f"📅 {order['created_at']}\n"
@@ -631,7 +636,12 @@ async def my_orders_cmd(message: types.Message):
     for order_id, order in orders_bp.items():
         if order['user_id'] == user_id:
             has_orders = True
-            status_emoji = "✅" if order['status'] == 'completed' else "⏳" if order['status'] == 'pending' else "❌"
+            status_emoji = {
+                "pending": "⏳",
+                "awaiting_purchase": "🛒",
+                "completed": "✅",
+                "rejected": "❌"
+            }.get(order['status'], "❓")
             orders_text += f"{status_emoji} **Покупка BP**\n"
             orders_text += f"🎮 {order['bp_package']}\n"
             orders_text += f"📅 {order['created_at']}\n"
@@ -641,7 +651,12 @@ async def my_orders_cmd(message: types.Message):
     for order_id, order in orders_stars.items():
         if order['user_id'] == user_id:
             has_orders = True
-            status_emoji = "✅" if order['status'] == 'completed' else "⏳" if order['status'] == 'pending' else "❌"
+            status_emoji = {
+                "pending": "⏳",
+                "awaiting_purchase": "🛒",
+                "completed": "✅",
+                "rejected": "❌"
+            }.get(order['status'], "❓")
             orders_text += f"{status_emoji} **Покупка Stars**\n"
             orders_text += f"⭐️ {order['stars_package']}\n"
             orders_text += f"📅 {order['created_at']}\n"
@@ -651,7 +666,12 @@ async def my_orders_cmd(message: types.Message):
     for order_id, order in orders_subs.items():
         if order['user_id'] == user_id:
             has_orders = True
-            status_emoji = "✅" if order['status'] == 'completed' else "⏳" if order['status'] == 'pending' else "❌"
+            status_emoji = {
+                "pending": "⏳",
+                "awaiting_purchase": "🛒",
+                "completed": "✅",
+                "rejected": "❌"
+            }.get(order['status'], "❓")
             sub_type_ru = "Со входом" if order['sub_type'] == "with_login" else "Подарочная"
             orders_text += f"{status_emoji} **Telegram Premium**\n"
             orders_text += f"📅 {sub_type_ru}, {order['sub_period']}\n"
@@ -1309,7 +1329,7 @@ async def process_receipt(message: types.Message, state: FSMContext):
             await state.clear()
             return
         
-        # Сохраняем заказ
+        # Сохраняем заказ со статусом "pending" (ожидание подтверждения оплаты)
         orders_data[order_id] = {
             "user_id": user_id,
             "user_name": message.from_user.full_name,
@@ -1318,7 +1338,7 @@ async def process_receipt(message: types.Message, state: FSMContext):
             "amount": amount,
             "details": details,
             "data": data,
-            "status": "pending",
+            "status": "pending",  # Ожидает подтверждения оплаты
             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "receipt_file_id": message.photo[-1].file_id
         }
@@ -1338,6 +1358,8 @@ async def process_receipt(message: types.Message, state: FSMContext):
 💰 Сумма: {amount:,} сум
 📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 📋 ID: `{order_id}`
+
+✅ Подтвердите оплату или отклоните заказ:
 """
         
         await bot.send_photo(
@@ -1359,10 +1381,10 @@ async def process_receipt(message: types.Message, state: FSMContext):
         await message.answer("❌ Произошла ошибка")
         await state.clear()
 
-# ===================== АДМИН: ПОДТВЕРЖДЕНИЕ/ОТКЛОНЕНИЕ ЗАКАЗОВ =====================
+# ===================== АДМИН: ПОДТВЕРЖДЕНИЕ ОПЛАТЫ =====================
 @dp.callback_query(lambda c: c.data and c.data.startswith('approve_'))
 async def admin_approve_order(callback: types.CallbackQuery):
-    """Подтверждение заказа администратором"""
+    """Подтверждение оплаты заказа администратором"""
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
         return
@@ -1372,6 +1394,8 @@ async def admin_approve_order(callback: types.CallbackQuery):
         parts = callback.data.split("_")
         order_type = parts[1]
         order_id = "_".join(parts[2:])
+        
+        logger.info(f"Подтверждение оплаты заказа: type={order_type}, id={order_id}")
         
         # Определяем файл и данные заказа
         if order_type == "gold":
@@ -1395,51 +1419,43 @@ async def admin_approve_order(callback: types.CallbackQuery):
             await callback.answer("❌ Заказ не найден!")
             return
         
-        # Обновляем статус
-        order['status'] = "approved"
+        # Обновляем статус на "awaiting_purchase" (ожидание покупки)
+        order['status'] = "awaiting_purchase"
         order['approved_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         order['approved_by'] = str(ADMIN_ID)
         save_data(orders_data, orders_file)
         
-        # Уведомляем пользователя
+        # Уведомляем пользователя - оплата подтверждена, ждем покупку
         user_id = order['user_id']
         try:
             if order_type == "gold":
-                # Начисляем голду
-                gold_amount = order['data']['gold_amount']
-                if user_id in users:
-                    users[user_id]['balance'] = users[user_id].get('balance', 0) + gold_amount
-                    users[user_id]['orders_count'] = users[user_id].get('orders_count', 0) + 1
-                    save_data(users, USERS_FILE)
-                
                 await bot.send_message(
                     user_id,
-                    f"✅ **Заказ подтвержден!**\n\n"
-                    f"💰 Вам начислено {gold_amount} голды\n"
+                    f"✅ **Оплата подтверждена!**\n\n"
+                    f"💰 Ваш заказ на {order['data']['gold_amount']} голды принят в обработку\n"
                     f"📋 ID заказа: `{order_id}`\n\n"
-                    f"Спасибо за покупку! 🙏",
+                    f"⏳ Ожидайте, администратор скоро купит скин и отправит вам.\n"
+                    f"Как только скин будет куплен, вы получите уведомление!",
                     parse_mode="Markdown"
                 )
                 
             elif order_type == "bp":
                 await bot.send_message(
                     user_id,
-                    f"✅ **Заказ BP подтвержден!**\n\n"
-                    f"🎮 {order['data']['bp_package']}\n"
-                    f"🆔 ID в игре: {order['data'].get('game_id', 'Не указан')}\n"
+                    f"✅ **Оплата подтверждена!**\n\n"
+                    f"🎮 Заказ BP принят в обработку\n"
                     f"📋 ID заказа: `{order_id}`\n\n"
-                    f"Спасибо за покупку! 🙏",
+                    f"⏳ Ожидайте, администратор активирует BP и пришлет подтверждение.",
                     parse_mode="Markdown"
                 )
                 
             elif order_type == "stars":
                 await bot.send_message(
                     user_id,
-                    f"✅ **Заказ Stars подтвержден!**\n\n"
-                    f"⭐️ {order['data']['stars_package']}\n"
-                    f"👤 Получатель: {order['data'].get('stars_recipient', 'Не указан')}\n"
+                    f"✅ **Оплата подтверждена!**\n\n"
+                    f"⭐️ Заказ Stars принят в обработку\n"
                     f"📋 ID заказа: `{order_id}`\n\n"
-                    f"Спасибо за покупку! 🙏",
+                    f"⏳ Ожидайте, администратор отправит Stars получателю.",
                     parse_mode="Markdown"
                 )
                 
@@ -1447,35 +1463,54 @@ async def admin_approve_order(callback: types.CallbackQuery):
                 sub_type_ru = "Со входом" if order['data']['sub_type'] == 'with_login' else "Подарочная"
                 await bot.send_message(
                     user_id,
-                    f"✅ **Заказ Telegram Premium подтвержден!**\n\n"
-                    f"📅 Тип: {sub_type_ru}\n"
-                    f"⏱️ {order['data']['sub_period']}\n"
+                    f"✅ **Оплата подтверждена!**\n\n"
+                    f"📅 Заказ Telegram Premium принят в обработку\n"
+                    f"Тип: {sub_type_ru}\n"
                     f"📋 ID заказа: `{order_id}`\n\n"
-                    f"Спасибо за покупку! 🙏",
+                    f"⏳ Ожидайте, администратор активирует подписку и пришлет подтверждение.",
                     parse_mode="Markdown"
                 )
-            
-            # Предлагаем оставить отзыв
-            await bot.send_message(
-                user_id,
-                "📝 **Оставить отзыв?**",
-                reply_markup=get_leave_review_keyboard(order_id, order_type)
-            )
             
         except Exception as e:
             logger.error(f"Ошибка уведомления пользователя: {e}")
         
-        # Обновляем сообщение админа
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n✅ **ЗАКАЗ ПОДТВЕРЖДЕН**\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+        # Отправляем админу уведомление с кнопкой для завершения заказа
+        await callback.message.answer(
+            f"✅ **ОПЛАТА ПОДТВЕРЖДЕНА**\n\n"
+            f"📋 ID заказа: `{order_id}`\n"
+            f"📦 Тип: {order_type}\n"
+            f"👤 Пользователь: {order['user_name']}\n\n"
+            f"🛒 **Теперь нужно купить скин/товар и отправить пользователю!**\n\n"
+            f"Нажмите кнопку ниже, когда купите товар:",
+            parse_mode="Markdown",
+            reply_markup=get_admin_complete_keyboard(order_id, order_type)
         )
         
-        await callback.answer("✅ Заказ подтвержден!")
+        # Редактируем исходное сообщение
+        try:
+            # Пытаемся отредактировать сообщение с чеком
+            if callback.message.photo:
+                # Если это фото с подписью
+                await callback.message.edit_caption(
+                    caption=f"{callback.message.caption}\n\n✅ **ОПЛАТА ПОДТВЕРЖДЕНА**\n⏰ {datetime.now().strftime('%H:%M:%S')}\n\n➡️ **Ожидание покупки товара**",
+                    reply_markup=None
+                )
+            elif callback.message.text:
+                # Если это текстовое сообщение
+                await callback.message.edit_text(
+                    text=f"{callback.message.text}\n\n✅ **ОПЛАТА ПОДТВЕРЖДЕНА**\n⏰ {datetime.now().strftime('%H:%M:%S')}\n\n➡️ **Ожидание покупки товара**",
+                    reply_markup=None
+                )
+        except Exception as e:
+            logger.error(f"Ошибка при редактировании сообщения: {e}")
+        
+        await callback.answer("✅ Оплата подтверждена!")
         
     except Exception as e:
         logger.error(f"Ошибка в admin_approve_order: {e}")
         await callback.answer("❌ Произошла ошибка")
 
+# ===================== АДМИН: ОТКЛОНЕНИЕ ЗАКАЗА =====================
 @dp.callback_query(lambda c: c.data and c.data.startswith('reject_') and not c.data.startswith('reject_w_') and not c.data.startswith('reject_sub_'))
 async def admin_reject_order(callback: types.CallbackQuery, state: FSMContext):
     """Отклонение заказа администратором"""
@@ -1584,9 +1619,10 @@ async def process_reject_reason(message: types.Message, state: FSMContext):
     
     await state.clear()
 
+# ===================== АДМИН: ЗАВЕРШЕНИЕ ЗАКАЗА (ПОКУПКА ТОВАРА) =====================
 @dp.callback_query(lambda c: c.data and c.data.startswith('complete_'))
 async def admin_complete_order(callback: types.CallbackQuery):
-    """Завершение заказа администратором"""
+    """Завершение заказа - админ купил товар и отправляет подтверждение"""
     if str(callback.from_user.id) != str(ADMIN_ID):
         await callback.answer("❌ Нет доступа!")
         return
@@ -1596,6 +1632,8 @@ async def admin_complete_order(callback: types.CallbackQuery):
         parts = callback.data.split("_")
         order_type = parts[1]
         order_id = "_".join(parts[2:])
+        
+        logger.info(f"Завершение заказа: type={order_type}, id={order_id}")
         
         # Определяем файл и данные заказа
         if order_type == "gold":
@@ -1619,43 +1657,147 @@ async def admin_complete_order(callback: types.CallbackQuery):
             await callback.answer("❌ Заказ не найден!")
             return
         
-        # Обновляем статус
-        order['status'] = "completed"
-        order['completed_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        order['completed_by'] = str(ADMIN_ID)
-        save_data(orders_data, orders_file)
-        
-        # Уведомляем пользователя
-        user_id = order['user_id']
-        try:
-            await bot.send_message(
-                user_id,
-                f"✅ **Заказ успешно завершен!**\n\n"
-                f"📋 ID заказа: `{order_id}`\n\n"
-                f"Спасибо за покупку! 🙏",
-                parse_mode="Markdown"
-            )
-            
-            # Предлагаем оставить отзыв
-            await bot.send_message(
-                user_id,
-                "📝 **Оставить отзыв?**",
-                reply_markup=get_leave_review_keyboard(order_id, order_type)
-            )
-            
-        except Exception as e:
-            logger.error(f"Ошибка уведомления пользователя: {e}")
-        
-        # Обновляем сообщение админа
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n✅ **ЗАКАЗ ЗАВЕРШЕН**\n⏰ {datetime.now().strftime('%H:%M:%S')}"
+        # Запрашиваем фото подтверждения
+        await state.update_data(
+            complete_order_id=order_id,
+            complete_order_type=order_type,
+            complete_order_data=order
         )
         
-        await callback.answer("✅ Заказ завершен!")
+        await callback.message.answer(
+            f"📸 **Отправьте фото подтверждения**\n\n"
+            f"📋 Заказ: `{order_id}`\n\n"
+            f"Отправьте фото/скриншот, подтверждающий покупку/активацию товара.\n"
+            f"Это фото будет отправлено пользователю.",
+            parse_mode="Markdown",
+            reply_markup=get_cancel_keyboard()
+        )
+        
+        await state.set_state(UserStates.waiting_skin_photo)
+        await callback.answer()
         
     except Exception as e:
         logger.error(f"Ошибка в admin_complete_order: {e}")
         await callback.answer("❌ Произошла ошибка")
+
+@dp.message(UserStates.waiting_skin_photo, F.photo)
+async def process_complete_photo(message: types.Message, state: FSMContext):
+    """Обработка фото подтверждения от админа и завершение заказа"""
+    if str(message.from_user.id) != str(ADMIN_ID):
+        await message.answer("❌ Нет доступа!")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    order_id = data.get('complete_order_id')
+    order_type = data.get('complete_order_type')
+    order = data.get('complete_order_data')
+    
+    if not order:
+        await message.answer("❌ Данные заказа не найдены!")
+        await state.clear()
+        return
+    
+    user_id = order['user_id']
+    
+    try:
+        # Определяем файл для сохранения
+        if order_type == "gold":
+            orders_file = ORDERS_GOLD_FILE
+            orders_data = orders_gold
+            
+            # Начисляем голду пользователю
+            gold_amount = order['data']['gold_amount']
+            if user_id in users:
+                users[user_id]['balance'] = users[user_id].get('balance', 0) + gold_amount
+                users[user_id]['orders_count'] = users[user_id].get('orders_count', 0) + 1
+                save_data(users, USERS_FILE)
+            
+            # Отправляем фото пользователю
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ выполнен!**\n\n"
+                        f"💰 Вам начислено {gold_amount} голды\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+            
+        elif order_type == "bp":
+            orders_file = ORDERS_BP_FILE
+            orders_data = orders_bp
+            
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ BP выполнен!**\n\n"
+                        f"🎮 {order['data']['bp_package']}\n"
+                        f"🆔 ID в игре: {order['data'].get('game_id', 'Не указан')}\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+            
+        elif order_type == "stars":
+            orders_file = ORDERS_STARS_FILE
+            orders_data = orders_stars
+            
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ Stars выполнен!**\n\n"
+                        f"⭐️ {order['data']['stars_package']}\n"
+                        f"👤 Получатель: {order['data'].get('stars_recipient', 'Не указан')}\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+            
+        elif order_type == "sub":
+            orders_file = ORDERS_SUBS_FILE
+            orders_data = orders_subs
+            sub_type_ru = "Со входом" if order['data']['sub_type'] == 'with_login' else "Подарочная"
+            
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ Telegram Premium выполнен!**\n\n"
+                        f"📅 Тип: {sub_type_ru}\n"
+                        f"⏱️ {order['data']['sub_period']}\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+        
+        # Предлагаем оставить отзыв
+        await bot.send_message(
+            user_id,
+            "📝 **Оставить отзыв?**",
+            reply_markup=get_leave_review_keyboard(order_id, order_type)
+        )
+        
+        # Обновляем статус заказа
+        order['status'] = "completed"
+        order['completed_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        order['completed_by'] = str(ADMIN_ID)
+        order['completion_photo'] = message.photo[-1].file_id
+        save_data(orders_data, orders_file)
+        
+        await message.answer(
+            f"✅ **Заказ успешно завершен!**\n\n"
+            f"📋 ID: `{order_id}`\n"
+            f"👤 Пользователь уведомлен.\n"
+            f"💰 Голда начислена (для gold заказов).",
+            parse_mode="Markdown",
+            reply_markup=get_main_keyboard()
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка завершения заказа: {e}")
+        await message.answer("❌ Не удалось завершить заказ")
+    
+    await state.clear()
 
 # ===================== АДМИН: ЧАТ ДЛЯ PREMIUM =====================
 @dp.callback_query(lambda c: c.data and c.data.startswith('start_chat_'))
@@ -1698,9 +1840,20 @@ async def admin_start_chat(callback: types.CallbackQuery):
         except Exception as e:
             logger.error(f"Ошибка уведомления пользователя: {e}")
         
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n✅ **ЧАТ АКТИВИРОВАН**\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-        )
+        # Редактируем сообщение админа
+        try:
+            if callback.message.photo:
+                await callback.message.edit_caption(
+                    caption=f"{callback.message.caption}\n\n✅ **ЧАТ АКТИВИРОВАН**\n⏰ {datetime.now().strftime('%H:%M:%S')}",
+                    reply_markup=None
+                )
+            else:
+                await callback.message.edit_text(
+                    text=f"{callback.message.text}\n\n✅ **ЧАТ АКТИВИРОВАН**\n⏰ {datetime.now().strftime('%H:%M:%S')}",
+                    reply_markup=None
+                )
+        except:
+            pass
         
         # Отправляем админу кнопку для завершения чата
         await bot.send_message(
@@ -1839,9 +1992,21 @@ async def admin_reject_sub(callback: types.CallbackQuery):
             except:
                 pass
         
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n❌ **ЗАКАЗ ОТКЛОНЕН**"
-        )
+        # Редактируем сообщение
+        try:
+            if callback.message.photo:
+                await callback.message.edit_caption(
+                    caption=f"{callback.message.caption}\n\n❌ **ЗАКАЗ ОТКЛОНЕН**",
+                    reply_markup=None
+                )
+            else:
+                await callback.message.edit_text(
+                    text=f"{callback.message.text}\n\n❌ **ЗАКАЗ ОТКЛОНЕН**",
+                    reply_markup=None
+                )
+        except:
+            pass
+        
         await callback.answer("❌ Заказ отклонен!")
     except Exception as e:
         logger.error(f"Ошибка в admin_reject_sub: {e}")
@@ -1866,9 +2031,14 @@ async def admin_buy_skin(callback: types.CallbackQuery):
         withdrawal['admin_started_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_data(withdrawals, WITHDRAWALS_FILE)
         
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n🛒 **АДМИН ПОКУПАЕТ СКИН**\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-        )
+        # Редактируем сообщение
+        try:
+            await callback.message.edit_text(
+                text=f"{callback.message.text}\n\n🛒 **АДМИН ПОКУПАЕТ СКИН**\n⏰ {datetime.now().strftime('%H:%M:%S')}",
+                reply_markup=None
+            )
+        except:
+            pass
         
         await callback.message.answer(
             "✅ Отметьте, когда купите скин у покупателя:",
@@ -1897,10 +2067,6 @@ async def admin_skin_purchased(callback: types.CallbackQuery):
         withdrawal['status'] = "skin_sent_to_buyer"
         withdrawal['skin_purchased_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         save_data(withdrawals, WITHDRAWALS_FILE)
-        
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n📸 **ОЖИДАНИЕ ФОТО СКИНА**\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-        )
         
         await callback.message.answer(
             "📸 Отправьте фото скина:",
@@ -1933,13 +2099,13 @@ async def admin_send_skin(callback: types.CallbackQuery, state: FSMContext):
             reply_markup=get_cancel_keyboard()
         )
         
-        await state.set_state(UserStates.waiting_skin_photo)
+        await state.set_state("waiting_skin_photo")
         await callback.answer()
     except Exception as e:
         logger.error(f"Ошибка в admin_send_skin: {e}")
         await callback.answer("❌ Произошла ошибка")
 
-@dp.message(UserStates.waiting_skin_photo, F.photo)
+@dp.message(F.photo, lambda message: message.state == "waiting_skin_photo")
 async def process_skin_photo(message: types.Message, state: FSMContext):
     if str(message.from_user.id) != str(ADMIN_ID):
         await message.answer("❌ Нет доступа!")
@@ -2027,9 +2193,15 @@ async def admin_reject_withdrawal(callback: types.CallbackQuery):
             except:
                 pass
         
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n❌ **ЗАЯВКА ОТКЛОНЕНА**"
-        )
+        # Редактируем сообщение
+        try:
+            await callback.message.edit_text(
+                text=f"{callback.message.text}\n\n❌ **ЗАЯВКА ОТКЛОНЕНА**",
+                reply_markup=None
+            )
+        except:
+            pass
+        
         await callback.answer("❌ Заявка отклонена!")
     except Exception as e:
         logger.error(f"Ошибка в admin_reject_withdrawal: {e}")
@@ -2050,9 +2222,15 @@ async def admin_skin_problem(callback: types.CallbackQuery):
             withdrawal['problem_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             save_data(withdrawals, WITHDRAWALS_FILE)
         
-        await callback.message.edit_text(
-            f"{callback.message.text}\n\n⚠️ **ПРОБЛЕМА С ЗАЯВКОЙ**\n⏰ {datetime.now().strftime('%H:%M:%S')}"
-        )
+        # Редактируем сообщение
+        try:
+            await callback.message.edit_text(
+                text=f"{callback.message.text}\n\n⚠️ **ПРОБЛЕМА С ЗАЯВКОЙ**\n⏰ {datetime.now().strftime('%H:%M:%S')}",
+                reply_markup=None
+            )
+        except:
+            pass
+        
         await callback.answer("⚠️ Проблема отмечена")
     except Exception as e:
         logger.error(f"Ошибка в admin_skin_problem: {e}")
