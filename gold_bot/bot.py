@@ -2649,3 +2649,197 @@ if __name__ == "__main__":
         print("=" * 50)
         print("🛑 Бот завершил работу")
         print("=" * 50)
+    # ===================== АДМИН: ЗАВЕРШЕНИЕ ЗАКАЗА (ПОКУПКА ТОВАРА) =====================
+@dp.callback_query(lambda c: c.data and c.data.startswith('complete_'))
+async def admin_complete_order(callback: types.CallbackQuery, state: FSMContext):
+    """Завершение заказа - админ купил товар и отправляет подтверждение"""
+    if str(callback.from_user.id) != str(ADMIN_ID):
+        await callback.answer("❌ Нет доступа!")
+        return
+    
+    try:
+        # Формат: complete_{order_type}_{order_id}
+        parts = callback.data.split("_")
+        order_type = parts[1]
+        order_id = "_".join(parts[2:])
+        
+        logger.info(f"Завершение заказа: type={order_type}, id={order_id}")
+        
+        # Определяем файл и данные заказа
+        if order_type == "gold":
+            orders_file = ORDERS_GOLD_FILE
+            orders_data = orders_gold
+        elif order_type == "bp":
+            orders_file = ORDERS_BP_FILE
+            orders_data = orders_bp
+        elif order_type == "stars":
+            orders_file = ORDERS_STARS_FILE
+            orders_data = orders_stars
+        elif order_type == "sub":
+            orders_file = ORDERS_SUBS_FILE
+            orders_data = orders_subs
+        else:
+            await callback.answer("❌ Неизвестный тип заказа!")
+            return
+        
+        order = orders_data.get(order_id)
+        if not order:
+            await callback.answer("❌ Заказ не найден!")
+            return
+        
+        # Сохраняем данные в state
+        await state.update_data(
+            complete_order_id=order_id,
+            complete_order_type=order_type,
+            complete_order_data=order
+        )
+        
+        # Удаляем сообщение с кнопкой
+        await callback.message.delete()
+        
+        # Отправляем запрос на фото
+        await callback.message.answer(
+            f"📸 **Отправьте фото подтверждения**\n\n"
+            f"📋 Заказ: `{order_id}`\n"
+            f"📦 Тип: {order_type}\n\n"
+            f"Отправьте фото/скриншот, подтверждающий покупку/активацию товара.\n"
+            f"Это фото будет отправлено пользователю.",
+            parse_mode="Markdown",
+            reply_markup=get_cancel_keyboard()
+        )
+        
+        await state.set_state(UserStates.waiting_skin_photo)
+        await callback.answer()
+        
+    except Exception as e:
+        logger.error(f"Ошибка в admin_complete_order: {e}")
+        await callback.answer("❌ Произошла ошибка")
+
+@dp.message(UserStates.waiting_skin_photo, F.photo)
+async def process_complete_photo(message: types.Message, state: FSMContext):
+    """Обработка фото подтверждения от админа и завершение заказа"""
+    if str(message.from_user.id) != str(ADMIN_ID):
+        await message.answer("❌ Нет доступа!")
+        await state.clear()
+        return
+    
+    data = await state.get_data()
+    order_id = data.get('complete_order_id')
+    order_type = data.get('complete_order_type')
+    order = data.get('complete_order_data')
+    
+    if not order:
+        await message.answer("❌ Данные заказа не найдены!")
+        await state.clear()
+        return
+    
+    user_id = order['user_id']
+    
+    try:
+        # Определяем файл для сохранения
+        if order_type == "gold":
+            orders_file = ORDERS_GOLD_FILE
+            orders_data = orders_gold
+            
+            # Начисляем голду пользователю
+            gold_amount = order['data']['gold_amount']
+            if user_id in users:
+                users[user_id]['balance'] = users[user_id].get('balance', 0) + gold_amount
+                users[user_id]['orders_count'] = users[user_id].get('orders_count', 0) + 1
+                save_data(users, USERS_FILE)
+            
+            # Отправляем фото пользователю
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ выполнен!**\n\n"
+                        f"💰 Вам начислено {gold_amount} голды\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+            
+        elif order_type == "bp":
+            orders_file = ORDERS_BP_FILE
+            orders_data = orders_bp
+            
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ BP выполнен!**\n\n"
+                        f"🎮 {order['data']['bp_package']}\n"
+                        f"🆔 ID в игре: {order['data'].get('game_id', 'Не указан')}\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+            
+        elif order_type == "stars":
+            orders_file = ORDERS_STARS_FILE
+            orders_data = orders_stars
+            
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ Stars выполнен!**\n\n"
+                        f"⭐️ {order['data']['stars_package']}\n"
+                        f"👤 Получатель: {order['data'].get('stars_recipient', 'Не указан')}\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+            
+        elif order_type == "sub":
+            orders_file = ORDERS_SUBS_FILE
+            orders_data = orders_subs
+            sub_type_ru = "Со входом" if order['data']['sub_type'] == 'with_login' else "Подарочная"
+            
+            await bot.send_photo(
+                user_id,
+                photo=message.photo[-1].file_id,
+                caption=f"✅ **Заказ Telegram Premium выполнен!**\n\n"
+                        f"📅 Тип: {sub_type_ru}\n"
+                        f"⏱️ {order['data']['sub_period']}\n"
+                        f"📋 ID заказа: `{order_id}`\n\n"
+                        f"Спасибо за покупку! 🙏",
+                parse_mode="Markdown"
+            )
+        
+        # Предлагаем оставить отзыв
+        await bot.send_message(
+            user_id,
+            "📝 **Оставить отзыв?**",
+            reply_markup=get_leave_review_keyboard(order_id, order_type)
+        )
+        
+        # Обновляем статус заказа
+        order['status'] = "completed"
+        order['completed_at'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        order['completed_by'] = str(ADMIN_ID)
+        order['completion_photo'] = message.photo[-1].file_id
+        save_data(orders_data, orders_file)
+        
+        await message.answer(
+            f"✅ **Заказ успешно завершен!**\n\n"
+            f"📋 ID: `{order_id}`\n"
+            f"👤 Пользователь уведомлен.\n"
+            f"💰 Голда начислена (для gold заказов).",
+            parse_mode="Markdown",
+            reply_markup=get_main_keyboard()
+        )
+        
+    except Exception as e:
+        logger.error(f"Ошибка завершения заказа: {e}")
+        await message.answer("❌ Не удалось завершить заказ")
+    
+    await state.clear()
+
+@dp.message(UserStates.waiting_skin_photo, F.text)
+async def process_complete_photo_text(message: types.Message, state: FSMContext):
+    """Обработка текста вместо фото"""
+    if message.text == "❌ Отмена":
+        await state.clear()
+        await message.answer("❌ Отменено", reply_markup=get_main_keyboard())
+        return
+    
+    await message.answer("❌ Пожалуйста, отправьте фото, а не текст")
